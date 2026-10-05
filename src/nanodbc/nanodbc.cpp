@@ -610,8 +610,10 @@ recent_error(SQLHANDLE handle, SQLSMALLINT handle_type, long& native, std::strin
             std::min<std::size_t>(static_cast<std::size_t>(total_bytes), sql_message.size());
         if (text_length > 0)
         {
+            // odbc patch: one diagnostic record per line, which
+            // odbc:::parse_database_error() relies on.
             if (!result.empty())
-                result += ' ';
+                result += '\n';
 
             result += nanodbc::string(
                 sql_message.begin(),
@@ -633,7 +635,8 @@ recent_error(SQLHANDLE handle, SQLSMALLINT handle_type, long& native, std::strin
 
     native = first_native_error;
     std::string status = state;
-    status += ": ";
+    // odbc patch: the diagnostic records start on the line after the SQLSTATE.
+    status += "\n";
     status += rvalue;
 
     // some drivers insert \0 into error messages for unknown reasons
@@ -2579,7 +2582,8 @@ public:
 
         if (param_descr_data_.find(param_index) == param_descr_data_.end())
         {
-            describe_parameters(param_index);
+            // odbc patch: fall back to VARCHAR(255) rather than throw.
+            describe_parameters(param_index, true /* fallback */);
         }
         auto const& described = param_descr_data_[param_index];
         param.index_ = param_index;
@@ -2803,7 +2807,7 @@ public:
             NANODBC_THROW_DATABASE_ERROR(stmt_, SQL_HANDLE_STMT);
     }
 
-    void describe_parameters(const short param_index)
+    void describe_parameters(const short param_index, bool fallback = false)
     {
         RETCODE rc = SQL_SUCCESS;
         SQLSMALLINT nullable = 0; // unused
@@ -2819,7 +2823,16 @@ public:
             &param_descr_data_[param_index].size_,
             &param_descr_data_[param_index].scale_,
             &nullable);
-        if (!success(rc))
+        if (!success(rc) && fallback)
+        {
+            // odbc patch: bind as VARCHAR(255) when the driver cannot describe the
+            // parameter (e.g. FreeTDS). Longer values are truncated and not every type
+            // converts, but binding works at all on such drivers.
+            param_descr_data_[param_index].type_ = SQL_VARCHAR;
+            param_descr_data_[param_index].size_ = 255;
+            param_descr_data_[param_index].scale_ = 0;
+        }
+        else if (!success(rc))
         {
             param_descr_data_.erase(param_index);
             NANODBC_THROW_DATABASE_ERROR(stmt_, SQL_HANDLE_STMT);
@@ -2860,6 +2873,12 @@ public:
     bool equals(date const& lhs, date const& rhs) noexcept;
     bool equals(time const& lhs, time const& rhs) noexcept;
     bool equals(timestamp const& lhs, timestamp const& rhs) noexcept;
+    // odbc patch: null sentry comparison for binding timestampoffset.
+    bool equals(timestampoffset const& lhs, timestampoffset const& rhs) noexcept
+    {
+        return equals(lhs.stamp, rhs.stamp) && lhs.offset_hour == rhs.offset_hour &&
+               lhs.offset_minute == rhs.offset_minute;
+    }
 
     template <class T>
     std::vector<T>& get_bound_string_data(short param_index);
@@ -2906,8 +2925,11 @@ void statement::statement_impl::bind(
     // prepare_bind starts every indicator out as SQL_NULL_DATA, so only the values that
     // are not null need marking here. A character value carries its own end, so it is
     // marked as terminated rather than as being the width of the parameter.
+    // odbc patch: anything else is marked with the size of its C type rather than the
+    // parameter's column size, which for a timestampoffset bound as SQL_C_BINARY would
+    // have the driver read past the end of the struct.
     auto const present = is_character<T>::value ? static_cast<null_type>(SQL_NTS)
-                                                : static_cast<null_type>(param.size_);
+                                                : static_cast<null_type>(sizeof(T));
     if (null_sentry)
     {
         for (std::size_t i = 0; i < batch_size; ++i)
@@ -3607,6 +3629,12 @@ public:
     bool equals(date const& lhs, date const& rhs) noexcept;
     bool equals(time const& lhs, time const& rhs) noexcept;
     bool equals(timestamp const& lhs, timestamp const& rhs) noexcept;
+    // odbc patch: null sentry comparison for binding timestampoffset.
+    bool equals(timestampoffset const& lhs, timestampoffset const& rhs) noexcept
+    {
+        return equals(lhs.stamp, rhs.stamp) && lhs.offset_hour == rhs.offset_hour &&
+               lhs.offset_minute == rhs.offset_minute;
+    }
 
     template <class T>
     std::vector<T>& get_bound_string_data(short param_index);
@@ -3642,8 +3670,11 @@ void table_valued_parameter::table_valued_parameter_impl::bind(
     // prepare_bind starts every indicator out as SQL_NULL_DATA, so only the values that
     // are not null need marking here. A character value carries its own end, so it is
     // marked as terminated rather than as being the width of the parameter.
+    // odbc patch: anything else is marked with the size of its C type rather than the
+    // parameter's column size, which for a timestampoffset bound as SQL_C_BINARY would
+    // have the driver read past the end of the struct.
     auto const present = is_character<T>::value ? static_cast<null_type>(SQL_NTS)
-                                                : static_cast<null_type>(param.size_);
+                                                : static_cast<null_type>(sizeof(T));
     if (null_sentry)
     {
         for (std::size_t i = 0; i < batch_size; ++i)
@@ -4257,6 +4288,10 @@ public:
             return false;
         if (!success(rc))
             NANODBC_THROW_DATABASE_ERROR(stmt_.native_statement_handle(), SQL_HANDLE_STMT);
+        // odbc patch: start the next result set from its first row. next() would
+        // otherwise step through the previous result set's rowset.
+        row_count_ = 0;
+        rowset_position_ = 0;
         auto_bind_columns();
         return true;
     }
@@ -6481,6 +6516,8 @@ NANODBC_INSTANTIATE_BINDS(double);
 NANODBC_INSTANTIATE_BINDS(date);
 NANODBC_INSTANTIATE_BINDS(time);
 NANODBC_INSTANTIATE_BINDS(timestamp);
+// odbc patch: write POSIXct to DATETIMEOFFSET.
+NANODBC_INSTANTIATE_BINDS(timestampoffset);
 
 // bool takes only the forms carrying no null information: the sentry form takes
 // `type const*` and the flags form `bool const*`, which collapse into one signature for
@@ -7102,6 +7139,8 @@ NANODBC_INSTANTIATE_TVP_BINDS(double);
 NANODBC_INSTANTIATE_TVP_BINDS(date);
 NANODBC_INSTANTIATE_TVP_BINDS(time);
 NANODBC_INSTANTIATE_TVP_BINDS(timestamp);
+// odbc patch: write POSIXct to DATETIMEOFFSET.
+NANODBC_INSTANTIATE_TVP_BINDS(timestampoffset);
 
 // See statement::bind above for why bool only gets the form without null information.
 template void table_valued_parameter::bind(short, const bool*, std::size_t); // n-ary
@@ -7305,14 +7344,15 @@ string catalog::tables::table_schema() const
 
 string catalog::tables::table_name() const
 {
-    // TABLE_NAME column is never NULL
-    return result_.get<string>(2);
+    // odbc patch: TABLE_NAME is NULL when SQLTables enumerates catalogs, schemas or
+    // table types.
+    return result_.get<string>(2, string());
 }
 
 string catalog::tables::table_type() const
 {
-    // TABLE_TYPE column is never NULL
-    return result_.get<string>(3);
+    // odbc patch: TABLE_TYPE is NULL when SQLTables enumerates catalogs or schemas.
+    return result_.get<string>(3, string());
 }
 
 string catalog::tables::table_remarks() const
