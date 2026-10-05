@@ -25,10 +25,10 @@
       dbConnect(odbc(), dsn = "does_not_exist_db")
     Condition
       Error in `dbConnect()`:
-      ! ODBC failed with error 00000 from [unixODBC][Driver Manager].
+      ! ODBC failed with error IM002 from [unixODBC][Driver Manager].
       x Data source name not found and no default driver specified
       i See `?odbc::odbcListDataSources()` to learn more.
-      i From 'nanodbc/nanodbc.cpp:1187'.
+      i From 'nanodbc/nanodbc.cpp:1548'.
 
 ---
 
@@ -36,10 +36,10 @@
       dbExecute(con, "SELECT * FROM boopbopbopbeep")
     Condition
       Error in `dbExecute()`:
-      ! ODBC failed with error 00000 from [SQLite].
+      ! ODBC failed with error HY000 from [SQLite].
       x no such table: boopbopbopbeep (1)
       * <SQL> 'SELECT * FROM boopbopbopbeep'
-      i From 'nanodbc/nanodbc.cpp:1805'.
+      i From 'nanodbc/nanodbc.cpp:2333'.
 
 # rethrow_database_error() errors well when parse_database_error() fails
 

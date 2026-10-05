@@ -1,5 +1,9 @@
 # odbc (development version)
 
+* odbc now bundles nanodbc 3.0.3, replacing a copy forked from upstream in 2017. Building odbc now requires a C++17 compiler (#1027).
+
+* Database errors now report the SQLSTATE of the error (e.g. `IM002`) rather than `00000` (#1027).
+
 # odbc 1.7.2
 
 * odbc now requires R 4.2.0.
