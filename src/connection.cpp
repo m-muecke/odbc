@@ -35,9 +35,9 @@ Rcpp::DataFrame list_drivers_() {
 Rcpp::DataFrame list_data_sources_() {
   std::vector<std::string> names;
   std::vector<std::string> descriptions;
-  for (auto& data_source : nanodbc::list_data_sources()) {
+  for (auto& data_source : nanodbc::list_datasources()) {
     names.push_back(data_source.name);
-    descriptions.push_back(data_source.description);
+    descriptions.push_back(data_source.driver);
   }
   return Rcpp::DataFrame::create(
       Rcpp::_["name"] = names,
@@ -146,6 +146,12 @@ void connection_rollback(connection_ptr const& p) { (*p)->rollback(); }
 // [[Rcpp::export]]
 bool connection_valid(connection_ptr const& p) { return p.get() != nullptr; }
 
+// nanodbc passes an empty search pattern to the driver as NULL, which matches
+// everything.
+std::string search_pattern(SEXP x) {
+  return x == R_NilValue ? std::string() : Rcpp::as<std::string>(x);
+}
+
 // [[Rcpp::export]]
 Rcpp::DataFrame connection_sql_tables(
     connection_ptr const& p,
@@ -155,11 +161,10 @@ Rcpp::DataFrame connection_sql_tables(
     SEXP table_type = R_NilValue) {
   auto c = nanodbc::catalog(*(*p)->connection());
   nanodbc::catalog::tables tables = nanodbc::catalog::tables(c.find_tables(
-      table_name == R_NilValue ? nullptr : Rcpp::as<const char*>(table_name),
-      table_type == R_NilValue ? nullptr : Rcpp::as<const char*>(table_type),
-      schema_name == R_NilValue ? nullptr : Rcpp::as<const char*>(schema_name),
-      catalog_name == R_NilValue ? nullptr
-                                 : Rcpp::as<const char*>(catalog_name)));
+      search_pattern(table_name),
+      search_pattern(table_type),
+      search_pattern(schema_name),
+      search_pattern(catalog_name)));
   std::vector<std::string> names;
   std::vector<std::string> types;
   std::vector<std::string> schemas;
@@ -234,11 +239,10 @@ Rcpp::DataFrame connection_sql_columns(
     SEXP table_name = R_NilValue) {
   auto c = nanodbc::catalog(*(*p)->connection());
   auto tables = c.find_columns(
-      column_name == R_NilValue ? nullptr : Rcpp::as<const char*>(column_name),
-      table_name == R_NilValue ? nullptr : Rcpp::as<const char*>(table_name),
-      schema_name == R_NilValue ? nullptr : Rcpp::as<const char*>(schema_name),
-      catalog_name == R_NilValue ? nullptr
-                                 : Rcpp::as<const char*>(catalog_name));
+      search_pattern(column_name),
+      search_pattern(table_name),
+      search_pattern(schema_name),
+      search_pattern(catalog_name));
 
   std::vector<std::string> column_names;
   std::vector<std::string> table_names;

@@ -57,9 +57,7 @@ odbc_connection::odbc_connection(
 
   try {
     std::list< nanodbc::connection::attribute > attributes;
-    std::list< std::shared_ptr< void > > buffer_context;
-    utils::prepare_connection_attributes(
-        timeout, r_attributes, attributes, buffer_context );
+    utils::prepare_connection_attributes(timeout, r_attributes, attributes);
     c_ = std::make_shared<nanodbc::connection>(connection_string, attributes);
   } catch (const nanodbc::database_error& e) {
     utils::raise_error(odbc_error(e, "", *output_encoder_));

@@ -33,7 +33,7 @@ public:
     message = Rf_translateChar(
         output_encoder.makeSEXP(m.c_str(), m.c_str() + m.length()));
   }
-  const char* what() const NANODBC_NOEXCEPT { return message.c_str(); }
+  const char* what() const noexcept { return message.c_str(); }
 
 private:
   // #432: must be native encoded, as R expects native encoded chars for error msg

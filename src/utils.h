@@ -15,7 +15,7 @@ namespace utils {
   /// \brief Prepare connection attributes
   ///
   /// Parse [R] named list of connection attributes and translate into
-  /// nanodbc::connection::attributes (tuple) format.
+  /// nanodbc::connection::attribute objects, which own their values.
   ///
   /// \param timeout Connection timeout.  This is a legacy argument that was
   /// a separate parameter prior to introduction of the more generic attributes
@@ -24,18 +24,10 @@ namespace utils {
   /// by default in dbConnect call.
   /// \param attributes List of nanodbc::connection::attributes.  Holds
   /// translated results.
-  /// \param buffer_context Connection attribtues may consist of memory
-  /// allocations that are not to be freed until after the call to
-  /// nanodbc::connection(...) or nanodbc::connect(...).  Developers should
-  /// wrap these allocations in a shared pointer with an appropriate deleter.
-  /// To make sure the allocation is not released before the connection is
-  /// established, one may store any shared pointers in this list and carry
-  /// them into the appropriate context as needed.
   void prepare_connection_attributes(
       long const& timeout,
       Rcpp::Nullable<Rcpp::List> const& r_attributes_,
-      std::list< nanodbc::connection::attribute >& attributes,
-      std::list< std::shared_ptr< void > >& buffer_context );
+      std::list< nanodbc::connection::attribute >& attributes );
 
   /// \brief Serialize authentication token for Microsoft Azure.
   ///
@@ -43,8 +35,8 @@ namespace utils {
   /// https://learn.microsoft.com/en-us/sql/connect/odbc/using-azure-active-directory?view=sql-server-ver16#authenticating-with-an-access-token
   ///
   /// \param token The authentication token.
-  /// \return A shared pointer to the buffer containing the serialized structure.
-  std::shared_ptr< void > serialize_azure_token( const std::string& token );
+  /// \return The serialized structure.
+  std::vector< std::uint8_t > serialize_azure_token( const std::string& token );
 
   /// \brief Wrapper to allow for interruptible execution of argument function
   ///

@@ -8,6 +8,8 @@ Authors@R: c(
     person("Simon", "Couch", , "simon.couch@posit.co", role = "aut"),
     person("lexicalunit", role = "cph",
            comment = "nanodbc library"),
+    person("Mateusz", "Loskot", role = "cph",
+           comment = "nanodbc library"),
     person("Google Inc.", role = "cph",
            comment = "cctz library"),
     person("Posit Software, PBC", role = c("cph", "fnd"))

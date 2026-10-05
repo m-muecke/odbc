@@ -556,7 +556,7 @@ std::vector<std::string> odbc_result::column_names(nanodbc::result const& r) {
   std::vector<std::string> names;
   names.reserve(num_columns_);
   for (short i = 0; i < num_columns_; ++i) {
-    nanodbc::string_type name = r.column_name(i);
+    nanodbc::string name = r.column_name(i);
     // Similar to the handling of string fields,
     // convert to UTF-8 before returning to user ( if needed )
     names.push_back(
@@ -1035,7 +1035,9 @@ void odbc_result::assign_string(
   if (value.is_null(column)) {
     res = NA_STRING;
   } else {
-    auto str = value.get<std::string>(column);
+    // An unbound column is only known to be NULL once it has been read, so read
+    // it with a fallback and check again.
+    auto str = value.get<std::string>(column, std::string());
     if (value.is_null(column)) {
       res = NA_STRING;
     } else {
@@ -1054,7 +1056,7 @@ void odbc_result::assign_ustring(
   if (value.is_null(column)) {
     res = NA_STRING;
   } else {
-    auto str = value.get<std::string>(column);
+    auto str = value.get<std::string>(column, std::string());
     if (value.is_null(column)) {
       res = NA_STRING;
     } else {
@@ -1071,7 +1073,7 @@ void odbc_result::assign_datetime(
   if (value.is_null(column)) {
     res = NA_REAL;
   } else {
-    auto ts = value.get<nanodbc::timestampoffset>(column);
+    auto ts = value.get<nanodbc::timestampoffset>(column, {});
     if (value.is_null(column)) {
       res = NA_REAL;
     } else {
@@ -1088,7 +1090,7 @@ void odbc_result::assign_date(
   if (value.is_null(column)) {
     res = NA_REAL;
   } else {
-    auto ts = value.get<nanodbc::date>(column);
+    auto ts = value.get<nanodbc::date>(column, {});
     if (value.is_null(column)) {
       res = NA_REAL;
     } else {
@@ -1105,7 +1107,7 @@ void odbc_result::assign_time(
   if (value.is_null(column)) {
     res = NA_REAL;
   } else {
-    auto ts = value.get<nanodbc::time>(column);
+    auto ts = value.get<nanodbc::time>(column, {});
     if (value.is_null(column)) {
       res = NA_REAL;
     } else {
@@ -1125,7 +1127,7 @@ void odbc_result::assign_raw(
     SET_VECTOR_ELT(Rf_allocVector(VECSXP, 1), 0, NILSXP);
     return;
   }
-  std::vector<std::uint8_t> data = value.get<std::vector<std::uint8_t>>(column);
+  std::vector<std::uint8_t> data = value.get<std::vector<std::uint8_t>>(column, {});
   if (value.is_null(column)) {
     SET_VECTOR_ELT(Rf_allocVector(VECSXP, 1), 0, NILSXP);
     return;
